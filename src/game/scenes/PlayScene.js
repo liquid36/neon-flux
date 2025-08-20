@@ -13,13 +13,29 @@ export default class PlayScene extends Phaser.Scene {
     // Minimal twin-stick feel: player + pointer aim + keyboard/gamepad
     this.cameras.main.setBackgroundColor("#000");
 
-    // Grid-like background using Graphics
+    // Grid-like background using Graphics with dashed lines
     const g = this.add.graphics();
     const { width, height } = this.scale;
-    g.lineStyle(1, 0x003355, 0.5);
+    g.lineStyle(1, 0xff1133, 0.6); // darker blue
     const cell = 32;
-    for (let x = 0; x <= width; x += cell) g.lineBetween(x, 0, x, height);
-    for (let y = 0; y <= height; y += cell) g.lineBetween(0, y, width, y);
+    const dashLength = 8;
+    const gapLength = 4;
+
+    // Vertical dashed lines
+    for (let x = 0; x <= width; x += cell) {
+      for (let y = 0; y < height; y += dashLength + gapLength) {
+        const endY = Math.min(y + dashLength, height);
+        g.lineBetween(x, y, x, endY);
+      }
+    }
+
+    // Horizontal dashed lines
+    for (let y = 0; y <= height; y += cell) {
+      for (let x = 0; x < width; x += dashLength + gapLength) {
+        const endX = Math.min(x + dashLength, width);
+        g.lineBetween(x, y, endX, y);
+      }
+    }
 
     // Generate a tiny circle texture for particles
     const pg = this.make.graphics({ x: 0, y: 0, add: false });
@@ -27,6 +43,14 @@ export default class PlayScene extends Phaser.Scene {
     pg.fillCircle(4, 4, 4);
     pg.generateTexture("dot", 8, 8);
     pg.destroy();
+
+    // Subtle cursor dot (reticle)
+    this.cursorDot = this.add.image(0, 0, "dot");
+    this.cursorDot.setScale(0.75).setDepth(12);
+    this.cursorDot.setBlendMode(Phaser.BlendModes.ADD).setTint(0xffee88);
+    if (this.cursorDot.postFX?.addGlow) {
+      this.cursorDot.postFX.addGlow(0xffee88, 3, 0.6, false, 0.2, 6);
+    }
 
     // Player
     this.player = this.add
@@ -40,6 +64,9 @@ export default class PlayScene extends Phaser.Scene {
     }
     this.physics.add.existing(this.player);
     this.player.body.setCircle(10);
+    // Constrain player within screen bounds
+    this.physics.world.setBounds(0, 0, width, height);
+    this.player.body.setCollideWorldBounds(true);
 
     this.speed = 300;
     this.lives = 3;
@@ -62,11 +89,24 @@ export default class PlayScene extends Phaser.Scene {
     // Weapon: Spread (supports 1,3,5 shots)
     this.weapon = new SpreadWeapon(this, this.bullets);
     this.weapon.setShotCount(1);
+    this.weapon.setSpeed(1000); // default projectile speed
+    // Expose for quick tweaking in console
+    if (typeof window !== "undefined") window.weapon = this.weapon;
 
     // Keyboard weapon selection: 1,2,3 => 1,3,5
     this.input.keyboard.on("keydown-ONE", () => this.weapon.setShotCount(1));
     this.input.keyboard.on("keydown-TWO", () => this.weapon.setShotCount(3));
     this.input.keyboard.on("keydown-THREE", () => this.weapon.setShotCount(5));
+    // Speed adjust: Z/X to -/+ 100
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    this.input.keyboard.on("keydown-Z", () => {
+      this.weapon.setSpeed(clamp(this.weapon.speed - 100, 100, 4000));
+      this.refreshUI?.();
+    });
+    this.input.keyboard.on("keydown-X", () => {
+      this.weapon.setSpeed(clamp(this.weapon.speed + 100, 100, 4000));
+      this.refreshUI?.();
+    });
 
     // Enemies
     this.enemies = new EnemySpawner(this);
@@ -88,8 +128,25 @@ export default class PlayScene extends Phaser.Scene {
 
     // UI
     this.ui = this.add
-      .text(10, 10, "Score: 0  Lives: 3", { fontSize: 16, color: "#88ddee" })
+      .text(10, 10, "", { fontSize: 16, color: "#88ddee" })
       .setDepth(100);
+    this.refreshUI = () => {
+      this.ui.setText(
+        `Score: ${this.score}  Lives: ${this.lives}  SPD: ${
+          this.weapon?.speed ?? "-"
+        }`
+      );
+    };
+    this.refreshUI();
+
+    // Reticle: subtle glowing dot at aim position
+    this.reticle = this.add.image(0, 0, "dot").setDepth(12);
+    this.reticle.setScale(0.6);
+    this.reticle.setBlendMode(Phaser.BlendModes.ADD);
+    this.reticle.setTint(0xffee88);
+    if (this.reticle.postFX?.addGlow) {
+      this.reticle.postFX.addGlow(0xffee88, 3, 0.5, false, 0.2, 6);
+    }
   }
 
   update(time, delta) {
@@ -125,14 +182,14 @@ export default class PlayScene extends Phaser.Scene {
       }
     }
 
-    // Draw a small line to indicate aim
-    if (!this.aimGfx) {
-      this.aimGfx = this.add.graphics({ depth: 9 });
-      this.aimGfx.setBlendMode(Phaser.BlendModes.ADD);
+    // Update reticle position to aim
+    if (this.reticle) {
+      this.reticle.x = aimX;
+      this.reticle.y = aimY;
     }
-    this.aimGfx.clear();
-    this.aimGfx.lineStyle(2, 0xffcc00, 0.8);
-    this.aimGfx.lineBetween(this.player.x, this.player.y, aimX, aimY);
+
+    // Update cursor reticle to follow aim
+    if (this.cursorDot) this.cursorDot.setPosition(aimX, aimY);
 
     // Shooting
     this.fireCooldown -= delta;
@@ -161,7 +218,7 @@ export default class PlayScene extends Phaser.Scene {
     if (b?.destroy) b.destroy();
     if (e?.destroy) e.destroy();
     this.score += 10;
-    this.ui.setText(`Score: ${this.score}  Lives: ${this.lives}`);
+    this.refreshUI?.();
     // Tiny burst (Phaser 3.60+ particles API)
     burst(this, e.x, e.y, 0xff66ff);
   }
@@ -172,7 +229,7 @@ export default class PlayScene extends Phaser.Scene {
     this.enemies?.clearAll();
     this.lives -= 1;
     this.cameras.main.flash(200, 255, 64, 64);
-    this.ui.setText(`Score: ${this.score}  Lives: ${this.lives}`);
+    this.refreshUI?.();
     if (this.lives <= 0) {
       this.gameOver();
     }

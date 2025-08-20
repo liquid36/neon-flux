@@ -19,19 +19,21 @@ export default class BulletManager {
    * Fires a bullet from (sx, sy) towards (tx, ty) with fixed speed.
    */
   fire(sx, sy, tx, ty, speed = 1000) {
-    const b = this.scene.physics.add.image(sx, sy, "dot");
+    const useKey = this.scene.textures?.exists("yellowshot")
+      ? "yellowshot"
+      : "dot";
+    const b = this.scene.physics.add.image(sx, sy, useKey);
     if (!b) return null;
     this.group.add(b);
 
     b.setActive(true).setVisible(true);
     b.setDepth(11);
     b.setBlendMode(Phaser.BlendModes.ADD);
-    if (b.postFX?.addGlow) {
-      b.postFX.addGlow(0xffee88, 4, 0.5, false, 0.2, 6);
-    }
+    // if (b.postFX?.addGlow) {
+    //   b.postFX.addGlow(0xffee88, 4, 0.5, false, 0.2, 6);
+    // }
     // Physics body config
     b.body.setAllowGravity(false);
-    b.body.setCircle(4);
     b.body.setImmovable(false);
     b.body.setCollideWorldBounds(false);
 
@@ -40,6 +42,21 @@ export default class BulletManager {
     const vy = Math.sin(angle) * speed;
     b.body.moves = true;
     b.setVelocity(vx, vy);
+
+    // Rotate sprite to travel direction; asset points UP, so add +90°.
+    if (useKey === "yellowshot") {
+      b.setOrigin(0.5, 0.5);
+      b.setRotation(angle + Math.PI / 2);
+      // Tweak scale/body for a slim projectile
+      b.setScale(0.9);
+      // Resize body roughly to sprite's visual core
+      const bw = b.displayWidth * 0.7;
+      const bh = b.displayHeight * 0.7;
+      b.body.setSize(bw, bh, true);
+    } else {
+      // Dot bullet: circular body
+      b.body.setCircle(4);
+    }
 
     // Off-screen cleanup
     const scene = this.scene;

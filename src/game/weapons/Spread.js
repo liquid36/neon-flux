@@ -10,11 +10,15 @@ export default class SpreadWeapon {
     this.scene = scene;
     this.bullets = bullets;
     this.shotCount = 1; // 1, 3, 5
-    this.baseSpeed = 1000;
+    this.speed = 1000;
   }
 
   setShotCount(n) {
     this.shotCount = Math.max(1, n | 0);
+  }
+
+  setSpeed(n) {
+    this.speed = Math.max(1, n | 0);
   }
 
   /**
@@ -23,7 +27,7 @@ export default class SpreadWeapon {
   fire(sx, sy, tx, ty) {
     const n = this.shotCount;
     if (n <= 1) {
-      this.bullets.fire(sx, sy, tx, ty, this.baseSpeed);
+      this.bullets.fire(sx, sy, tx, ty, this.speed);
       return;
     }
 
@@ -41,7 +45,7 @@ export default class SpreadWeapon {
       const range = 1000; // used only to compute a far target point
       const tx2 = sx + Math.cos(ang) * range;
       const ty2 = sy + Math.sin(ang) * range;
-      this.bullets.fire(sx, sy, tx2, ty2, this.baseSpeed);
+      this.bullets.fire(sx, sy, tx2, ty2, this.speed);
     }
   }
 }

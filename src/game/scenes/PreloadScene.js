@@ -6,7 +6,8 @@ export default class PreloadScene extends Phaser.Scene {
   }
 
   preload() {
-    // TODO: load sprites, sounds
+    // Sprites
+    this.load.image("yellowshot", "assets/yellowshot.png");
   }
 
   create() {
